@@ -3,6 +3,7 @@
 # Usage: pnpm deploy   (builds first, then force-syncs site/ -> gh-pages)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ORIGIN="$(git -C "$ROOT" remote get-url origin)"
 export PATH="/opt/data/home/.npm-global/bin:$PATH"
 cd "$ROOT"
 pnpm build
@@ -22,6 +23,6 @@ cp -r "$ROOT/site/"* "$TMP"/
 cd "$TMP"
 git add -A
 git -c user.name="dw" -c user.email="spencery145@gmail.com" commit --quiet -m "deploy: $(date -u +%FT%TZ)" || true
-git push --quiet origin gh-pages
+git push --quiet "$ORIGIN" gh-pages:gh-pages
 rm -rf "$TMP"
 echo "deployed -> https://driftwintergames.github.io/ad-game-clones/"
