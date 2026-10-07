@@ -1,0 +1,19 @@
+# AGC shared DAG — cross-game tuning tokens.
+# Convention (architecture.md): unprefixed tokens here are readable by every
+# game; games prefix their own tokens (<game>_). Shared never reads games.
+
+# —— Meta progression (every game reports into these state tokens) ——
+VAR meta_xp_level_mult = 1.5
+VAR meta_streak_bonus_max = 5
+
+CALC meta_level_xp_req = 50 * meta_xp_level_mult ^ meta_level
+# meta_level, meta_xp are live STATE tokens set by each game at run end.
+
+# —— Shared juice pacing ——
+VAR combo_pitch_step = 0.06      # semitone-ish step per combo hit
+VAR combo_pitch_max = 12         # cap (one octave)
+CALC combo_pitch_factor = 1 + min(combo, combo_pitch_max) * combo_pitch_step
+# combo is a live state token maintained by each game.
+
+# —— Shared attempt economy ——
+VAR near_miss_window = 0.85      # progress fraction that triggers "so close" framing

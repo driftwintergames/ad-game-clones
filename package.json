@@ -1,0 +1,12 @@
+{
+  "name": "ad-game-clones",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "kernel:build": "pnpm --filter @adgc/dag-kernel build && pnpm --filter @adgc/juice build",
+    "dag:stitch": "pnpm kernel:build && node packages/dag-kernel/dist/stitcher.js",
+    "build": "pnpm dag:stitch && pnpm --filter bus-fever build",
+    "dev": "pnpm dag:stitch && pnpm --filter bus-fever dev",
+    "preview": "pnpm --filter bus-fever preview"
+  }
+}
