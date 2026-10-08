@@ -56,9 +56,18 @@ export class BusFeverScene extends Phaser.Scene {
   private hud!: Record<string, HTMLElement>;
   private overlay!: HTMLElement;
   private queueGfx?: Phaser.GameObjects.Container;
+  private zoneGfx?: Phaser.GameObjects.Container;
+  private crowdGfx?: Phaser.GameObjects.Graphics;
+  private crowdText?: Phaser.GameObjects.Text;
   private nextId = 1;
 
   constructor() { super('bus-fever'); }
+
+  private startAt = 0;
+
+  init(data: { level?: number }): void {
+    this.startAt = data?.level ?? 0;
+  }
 
   create(): void {
     const json = dagDefs as unknown as ConstructorParameters<typeof DagRuntime>[0];
@@ -71,8 +80,9 @@ export class BusFeverScene extends Phaser.Scene {
     };
     this.overlay = document.getElementById('overlay')!;
     document.getElementById('ov-btn')!.onclick = () => this.retry();
+    document.getElementById('menu-btn')!.onclick = () => this.scene.start('menu');
     this.scale.on('resize', () => this.layout());
-    this.startLevel(Math.max(1, Math.floor(this.rt.get('bus_fever_level') || 1)));
+    this.startLevel(this.startAt || Math.max(1, Math.floor(this.rt.get('bus_fever_level') || 1)));
     (window as unknown as { __bf?: BusFeverScene }).__bf = this; // test hook
   }
 
@@ -139,13 +149,37 @@ export class BusFeverScene extends Phaser.Scene {
 
   private layout(): void {
     const w = this.scale.width, h = this.scale.height;
-    this.lotBottomY = h * 0.42;
+    this.lotBottomY = h * 0.46;
     this.spotW = Math.min(88, (w - 24 - (this.lotCols - 1) * 8) / this.lotCols);
-    this.spotH = Math.min(52, (this.lotBottomY - 110) / 3.4);
-    // bays along the right edge below the lot
-    const bayY0 = this.lotBottomY + 70;
+    this.spotH = Math.min(52, (this.lotBottomY - 120) / 3.4);
+    // bays along the right edge, below the lot
+    const bayY0 = this.lotBottomY + 64;
     this.bays.forEach((b, i) => { b.x = w - 70; b.y = bayY0 + i * 80; });
+    this.drawZones(w, h);
     this.redrawAll();
+  }
+
+  /** Tinted, labeled zones: BUS LOT / ACTIVE BUS ZONE / WAITING QUEUE. */
+  private drawZones(w: number, h: number): void {
+    this.zoneGfx?.destroy();
+    const c = this.add.container(0, 0).setDepth(-1);
+    this.zoneGfx = c;
+    const queueTop = h - 118;
+    const activeTop = this.lotBottomY + 26;
+    const zone = (x: number, y: number, zw: number, zh: number, fill: number, label: string, alpha = 0.10) => {
+      const r = this.add.rectangle(x + zw / 2, y + zh / 2, zw, zh, fill, alpha)
+        .setStrokeStyle(2, fill, 0.55);
+      const t = this.add.text(x + 10, y + 8, label, {
+        fontFamily: 'monospace', fontSize: '11px', color: '#' + fill.toString(16).padStart(6, '0')
+      }).setAlpha(0.9);
+      c.add([r, t]);
+    };
+    // LOT: full width, from below HUD to lot bottom
+    zone(8, 96, w - 16, this.lotBottomY - 88, 0x4c9be4, 'BUS LOT');
+    // ACTIVE BUS ZONE: right strip from lot bottom to queue top
+    zone(w - 156, activeTop, 148, queueTop - activeTop - 8, 0x58c07a, 'ACTIVE BUS ZONE');
+    // WAITING QUEUE: bottom strip
+    zone(8, queueTop, w - 16, 110, 0xf0c33c, 'WAITING QUEUE', 0.08);
   }
 
   private redrawAll(): void {
@@ -204,18 +238,35 @@ export class BusFeverScene extends Phaser.Scene {
     this.queueGfx = this.add.container(0, 0).setDepth(1);
     const w = this.scale.width;
     const y = this.scale.height - 64;
-    const r = 8, gap = 19;
-    const maxShow = Math.min(this.queue.length, Math.floor((w - 40) / gap));
-    for (let i = 0; i < maxShow; i++) {
-      const dot = this.add.circle(24 + i * gap, y, r, COLORS[this.queue[i]].hex, 0.95);
-      if (i === 0) dot.setStrokeStyle(2, 0xffffff);
-      this.queueGfx.add(dot);
-    }
-    if (this.queue.length > maxShow) {
-      const more = this.add.text(24 + maxShow * gap, y, `+${this.queue.length - maxShow}`, {
-        fontFamily: 'monospace', fontSize: '11px', color: '#8a94a8'
-      }).setOrigin(0, 0.5);
-      this.queueGfx.add(more);
+    const distinct = new Map<number, number>();
+    for (const c of this.queue) distinct.set(c, (distinct.get(c) ?? 0) + 1);
+
+    if (this.queue.length <= 24) {
+      // few waiting: one dot per passenger (visible boarding order)
+      const r = 8, gap = 19;
+      this.queue.slice(0, 24).forEach((color, i) => {
+        const dot = this.add.circle(24 + i * gap, y, r, COLORS[color].hex, 0.95);
+        if (i === 0) dot.setStrokeStyle(2, 0xffffff);
+        this.queueGfx!.add(dot);
+      });
+    } else {
+      // crowd scale: one batched color-stacked bar (front of line = left)
+      const g = this.add.graphics();
+      const bw = w - 64, x0 = 32;
+      let x = x0;
+      for (let color = 0; color < COLORS.length; color++) {
+        const n = distinct.get(color);
+        if (!n) continue;
+        const width = (n / this.queue.length) * bw;
+        g.fillStyle(COLORS[color].hex, 0.92);
+        g.fillRect(x, y - 14, Math.max(width, 2), 28);
+        x += width;
+      }
+      this.queueGfx.add(g);
+      const cnt = this.add.text(x0, y - 34, `${this.queue.length} waiting · cap ${this.queueCap}`, {
+        fontFamily: 'monospace', fontSize: '12px', color: '#e8ecf4'
+      });
+      this.queueGfx.add(cnt);
     }
     // capacity floor line
     const line = this.add.rectangle(w / 2, y + 20, w - 48, 2, 0x232c3d);
@@ -356,6 +407,7 @@ export class BusFeverScene extends Phaser.Scene {
     this.coins += coinsWon;
     this.rt.setState({
       bus_fever_streak: this.streak,
+      bus_fever_level: this.level + 1, // unlock next level for the selector
       coin: this.coins,
       meta_xp: (this.rt.get('meta_xp') || 0) + this.level * 10,
       meta_level: this.autoMetaLevel()

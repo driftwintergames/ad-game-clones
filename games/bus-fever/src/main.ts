@@ -1,8 +1,5 @@
+import { MenuScene } from './menu';
 import { BusFeverScene } from './scene';
-
-window.addEventListener('error', (e) => {
-  console.error('BOOT-ERR', e.message, '@', e.filename, ':', e.lineno, '\n', e.error?.stack ?? '');
-});
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -13,7 +10,7 @@ const config: Phaser.Types.Core.GameConfig = {
     width: '100%',
     height: '100%'
   },
-  scene: [BusFeverScene]
+  scene: [MenuScene, BusFeverScene]
 };
 
 new Phaser.Game(config);
