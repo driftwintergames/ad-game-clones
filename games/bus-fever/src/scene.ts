@@ -47,8 +47,12 @@ export class BusFeverScene extends Phaser.Scene {
   private lotBottomY = 0;
   private spotW = 0; private spotH = 0;
   private bays: Bay[] = [];
-  private queue: number[] = [];
-  private queueCap = 12;
+  private lanes: number[][] = [];   // crowd array: column arrays of passengers (index 0 = front = boardable)
+  private columnsN = 4;             // exposed columns (4-7 by level)
+  private pattern: number[] = [];   // repeating color cycle that fills the hidden depth
+  private patternPos = 0;
+  private frontPerBus = 2;          // lane-fronts a bay bus may pull per boarding tick
+  private queueCap = 520;           // crowd fail line
   private nextArrival = 0;
   private boardTimer = 0;
   private level = 1; private streak = 0; private coins = 0;
@@ -57,9 +61,13 @@ export class BusFeverScene extends Phaser.Scene {
   private overlay!: HTMLElement;
   private queueGfx?: Phaser.GameObjects.Container;
   private zoneGfx?: Phaser.GameObjects.Container;
-  private crowdGfx?: Phaser.GameObjects.Graphics;
-  private crowdText?: Phaser.GameObjects.Text;
   private nextId = 1;
+
+  /** Visible fronts across lanes — what a bus can actually pull right now. */
+  get queue(): number[] { return this.lanes.map(l => l[0]).filter(c => c !== undefined); }
+
+  /** Total crowd (visible + hidden). */
+  get crowdSize(): number { return this.lanes.reduce((n, l) => n + l.length, 0); }
 
   constructor() { super('bus-fever'); }
 
@@ -92,7 +100,7 @@ export class BusFeverScene extends Phaser.Scene {
     this.level = level;
     this.rt.setState({ bus_fever_level: level });
     this.vehicles = [];
-    this.queue = [];
+    this.lanes = [];
     this.bays = [];
     this.nextId = 1;
 
@@ -129,14 +137,30 @@ export class BusFeverScene extends Phaser.Scene {
     // bays
     for (let b = 0; b < baysN; b++) this.bays.push({ idx: b, x: 0, y: 0, occupant: null });
 
-    // seed queue: one of each color present on the lot first (solvability head start), then uniform filler
+    // —— crowd array: exposed lanes filled by a hidden repeating pattern ——
+    this.columnsN = Math.max(4, Math.min(7, Math.floor(this.rt.get('bus_fever_columns') || 4)));
+    const seedN = Math.floor(this.rt.get('bus_fever_seed_queue') || 200);
+    // CRITICAL: pattern may only contain colors that exist as vehicles on this
+    // lot — a dead color at a lane front can never be pulled (no bus matches),
+    // blocking the lane forever and making the level unwinnable.
     const lotColors = [...new Set(this.vehicles.map(v => v.colorIdx))];
     Phaser.Utils.Array.Shuffle(lotColors);
-    this.queue.push(...lotColors);
-    const seedN = Math.floor(this.rt.get('bus_fever_seed_queue') || 6);
-    while (this.queue.length < Math.min(seedN, this.queueCap - 1))
-      this.queue.push(Math.floor(Math.random() * colorsN));
-
+    this.pattern = [...lotColors];
+    this.patternPos = 0;
+    const takePattern = (): number => {
+      const c = this.pattern[this.patternPos % this.pattern.length];
+      this.patternPos++;
+      return c;
+    };
+    this.lanes = Array.from({ length: this.columnsN }, () => [] as number[]);
+    let placed = 0;
+    // visible fronts first (lot colors lead so the first bus always has riders)
+    for (let lane = 0; placed < seedN; lane = (lane + 1) % this.columnsN) {
+      const front = placed < lotColors.length ? lotColors[placed] : takePattern();
+      this.lanes[lane].push(front);
+      placed++;
+    }
+    this.queueCap = Math.floor(this.rt.get('bus_fever_queue_cap') || 520);
     this.nextArrival = 2500;
     this.boardTimer = 0;
     this.running = true;
@@ -237,40 +261,45 @@ export class BusFeverScene extends Phaser.Scene {
     this.queueGfx?.destroy();
     this.queueGfx = this.add.container(0, 0).setDepth(1);
     const w = this.scale.width;
-    const y = this.scale.height - 64;
-    const distinct = new Map<number, number>();
-    for (const c of this.queue) distinct.set(c, (distinct.get(c) ?? 0) + 1);
-
-    if (this.queue.length <= 24) {
-      // few waiting: one dot per passenger (visible boarding order)
-      const r = 8, gap = 19;
-      this.queue.slice(0, 24).forEach((color, i) => {
-        const dot = this.add.circle(24 + i * gap, y, r, COLORS[color].hex, 0.95);
-        if (i === 0) dot.setStrokeStyle(2, 0xffffff);
-        this.queueGfx!.add(dot);
-      });
-    } else {
-      // crowd scale: one batched color-stacked bar (front of line = left)
-      const g = this.add.graphics();
-      const bw = w - 64, x0 = 32;
-      let x = x0;
-      for (let color = 0; color < COLORS.length; color++) {
-        const n = distinct.get(color);
-        if (!n) continue;
-        const width = (n / this.queue.length) * bw;
-        g.fillStyle(COLORS[color].hex, 0.92);
-        g.fillRect(x, y - 14, Math.max(width, 2), 28);
-        x += width;
+    const zoneTop = this.scale.height - 118;
+    const cw = Math.min(78, (w - 24 - (this.columnsN - 1) * 8) / this.columnsN);
+    const x0 = (w - (this.columnsN * cw + (this.columnsN - 1) * 8)) / 2 + cw / 2;
+    const frontY = this.scale.height - 52;
+    for (let i = 0; i < this.columnsN; i++) {
+      const lane = this.lanes[i] ?? [];
+      const cx = x0 + i * (cw + 8);
+      // faint column strip marks the boarding lane
+      const strip = this.add.rectangle(cx, zoneTop + 64, cw, 92, 0xffffff, 0.03)
+        .setStrokeStyle(1, 0x232c3d, 0.8);
+      this.queueGfx!.add(strip);
+      if (lane.length) {
+        // front of lane: the only boardable passenger (ringed)
+        const front = this.add.circle(cx, frontY, 15, COLORS[lane[0]].hex, 1)
+          .setStrokeStyle(3, 0xffffff);
+        this.queueGfx!.add(front);
+        // preview: next in this lane
+        if (lane.length > 1) {
+          const nxt = this.add.circle(cx, frontY - 32, 9, COLORS[lane[1]].hex, 0.8);
+          this.queueGfx!.add(nxt);
+        }
+        // hidden depth count (patterned mass)
+        if (lane.length > 2) {
+          const hid = this.add.text(cx, frontY - 52, `+${lane.length - 2}`, {
+            fontFamily: 'monospace', fontSize: '11px', color: '#8a94a8'
+          }).setOrigin(0.5);
+          this.queueGfx!.add(hid);
+        }
+      } else {
+        const empty = this.add.text(cx, frontY, '·', {
+          fontFamily: 'monospace', fontSize: '16px', color: '#4a5568'
+        }).setOrigin(0.5);
+        this.queueGfx!.add(empty);
       }
-      this.queueGfx.add(g);
-      const cnt = this.add.text(x0, y - 34, `${this.queue.length} waiting · cap ${this.queueCap}`, {
-        fontFamily: 'monospace', fontSize: '12px', color: '#e8ecf4'
-      });
-      this.queueGfx.add(cnt);
     }
-    // capacity floor line
-    const line = this.add.rectangle(w / 2, y + 20, w - 48, 2, 0x232c3d);
-    this.queueGfx.add(line);
+    const capTxt = this.add.text(w - 16, zoneTop + 6, `${this.crowdSize} in crowd · cap ${this.queueCap}`, {
+      fontFamily: 'monospace', fontSize: '11px', color: '#8a94a8'
+    }).setOrigin(1, 0);
+    this.queueGfx.add(capTxt);
   }
 
   // —— interactions ——
@@ -319,28 +348,48 @@ export class BusFeverScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     if (!this.running) return;
 
-    // arrivals — only colors still needed can arrive (dead colors never flood
-    // the queue), biased toward vehicles currently boarding in bays
+    // arrivals join the shortest lane; crowd cap = fail line
     this.nextArrival -= delta;
     if (this.nextArrival <= 0) {
-      if (this.queue.length >= this.queueCap) { this.failLevel(); return; }
-      this.queue.push(this.pickArrivalColor());
+      const shortest = this.lanes.reduce((a, b) => (b.length < a.length ? b : a), this.lanes[0]);
+      if (!shortest || this.crowdSize >= this.queueCap) { this.failLevel(); return; }
+      shortest.push(this.pickArrivalColor());
       this.drawQueue();
       this.syncHud();
       this.nextArrival = (this.rt.get('bus_fever_arrival_interval') || 3.5) * 1000;
     }
 
-    // boarding: each bay pulls front-most matching passenger every 450ms
+    // boarding: bus pulls matching passengers from lane FRONTS (the puzzle:
+    // what's exposed), but if the crowd has ample supply (≥3 waiting of that
+    // color anywhere), later rows also shuffle forward — a bus in a bay should
+    // never deadlock while dozens of matching passengers stand in lane 3+
     this.boardTimer -= delta;
     if (this.boardTimer <= 0) {
       this.boardTimer = 450;
       for (const bay of this.bays) {
         const v = bay.occupant;
         if (!v || v.state !== 'bay' || v.on >= v.cap) continue;
-        const qi = this.queue.indexOf(v.colorIdx);
-        if (qi >= 0) {
-          this.queue.splice(qi, 1);
-          v.on += 1;
+        let pulled = 0;
+        for (let li = 0; li < this.lanes.length && pulled < this.frontPerBus && v.on < v.cap; li++) {
+          if (this.lanes[li][0] === v.colorIdx) {
+            this.lanes[li].shift();
+            v.on += 1;
+            pulled++;
+          }
+        }
+        if (!pulled) {
+          // no matching front: pull from depth if supply is ample (shuffling queue)
+          let depthSupply = 0;
+          for (const lane of this.lanes) depthSupply += lane.filter(c => c === v.colorIdx).length;
+          if (depthSupply >= 3) {
+            for (const lane of this.lanes) {
+              if (v.on >= v.cap) break;
+              const di = lane.indexOf(v.colorIdx);
+              if (di >= 0) { lane.splice(di, 1); v.on += 1; pulled++; if (pulled >= this.frontPerBus) break; }
+            }
+          }
+        }
+        if (pulled) {
           this.updateVehicleLabel(v);
           this.sfx.comboBlip(1 + v.on * 0.06);
           haptic(6);
@@ -355,14 +404,22 @@ export class BusFeverScene extends Phaser.Scene {
     if (this.vehicles.every(v => v.state === 'gone')) { this.winLevel(); return; }
   }
 
-  /** Fair arrival pool: colors of vehicles that still need passengers
-   *  (parked/driving/bay with room). 60% bias toward bay vehicles' colors. */
+  /** Arrival color: 60% bias to bay-boardable colors, else the repeating
+   *  pattern advances (predictable hidden depth), else a needy color. */
   private pickArrivalColor(): number {
     const needy = this.vehicles.filter(v => v.state !== 'gone' && v.state !== 'departing' && v.on < v.cap);
-    if (!needy.length) return Math.floor(Math.random() * COLORS.length);
+    if (!needy.length) return this.patternAdvance();
     const boarding = needy.filter(v => v.state === 'bay');
-    const pool = boarding.length && Math.random() < 0.6 ? boarding : needy;
-    return pool[Math.floor(Math.random() * pool.length)].colorIdx;
+    if (boarding.length && Math.random() < 0.6)
+      return boarding[Math.floor(Math.random() * boarding.length)].colorIdx;
+    if (Math.random() < 0.5) return this.patternAdvance();
+    return needy[Math.floor(Math.random() * needy.length)].colorIdx;
+  }
+
+  private patternAdvance(): number {
+    const c = this.pattern[this.patternPos % this.pattern.length];
+    this.patternPos++;
+    return c;
   }
 
   private depart(v: Vehicle): void {
@@ -445,7 +502,7 @@ export class BusFeverScene extends Phaser.Scene {
 
   private syncHud(): void {
     if (!this.hud) return;
-    this.hud.queued.textContent = `${this.queue.length}/${this.queueCap}`;
+    this.hud.queued.textContent = `${this.crowdSize}/${this.queueCap}`;
     const left = this.vehicles.filter(v => v.state !== 'gone').length;
     this.hud.goal.textContent = `${left} left`;
     this.hud.level.textContent = `L${this.level}`;

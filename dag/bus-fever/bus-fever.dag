@@ -10,7 +10,9 @@ CALC bus_fever_capacity = min(6, 4 + (bus_fever_level - 1) / 4)
 # —— Blocker cars (from level 6, cap 3) ——
 CALC bus_fever_cars = min(3, max(0, (bus_fever_level - 6) / 2))
 
-# —— Queue pressure: ad-scale crowd (cap = the fail line) ——
+# —— Crowd array: 4-7 exposed columns (lanes); only lane fronts can board ——
+CALC bus_fever_columns = min(7, 4 + (bus_fever_level - 1) / 4)
+# crowd depth (hidden mass behind the exposed front rows)
 VAR bus_fever_queue_cap = 520
 CALC bus_fever_seed_queue = min(500, 200 + (bus_fever_level - 1) * 30)
 
