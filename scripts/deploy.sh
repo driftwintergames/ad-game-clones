@@ -8,6 +8,11 @@ export PATH="/opt/data/home/.npm-global/bin:$PATH"
 cd "$ROOT"
 pnpm build
 
+# keep the local gh-pages ref current (the TMP clone pushes to origin, so this
+# repo's ref is always one deploy behind — without this fetch every second
+# deploy fails with non-fast-forward)
+git fetch --quiet "$ORIGIN" gh-pages:gh-pages 2>/dev/null || true
+
 TMP="$ROOT/.ghpages"
 rm -rf "$TMP"; mkdir -p "$TMP"
 if git show-ref --verify --quiet refs/heads/gh-pages; then
