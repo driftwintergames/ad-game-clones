@@ -1,51 +1,21 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Bus Fever</title>
-  <style>
-    html, body { margin: 0; padding: 0; background: #10141c; overflow: hidden; }
-    #game { width: 100vw; height: 100vh; }
-    canvas { display: block; }
-    #hud {
-      position: fixed; top: 0; left: 0; right: 0; padding: max(10px, env(safe-area-inset-top)) 14px 8px;
-      display: flex; justify-content: space-between; align-items: baseline;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: #e8ecf4;
-      pointer-events: none; user-select: none; text-shadow: 0 2px 6px rgba(0,0,0,.6);
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#16191E" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
     }
-    #hud .big { font-size: 22px; font-weight: 700; }
-    #hud .sub { font-size: 13px; opacity: .75; }
-    #overlay {
-      position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
-      background: rgba(8, 10, 16, .82); color: #e8ecf4; text-align: center;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace; z-index: 10;
-    }
-    #overlay.show { display: flex; }
-    #overlay h1 { font-size: 30px; margin: 0 0 6px; }
-    #overlay p { margin: 4px 0 18px; opacity: .85; font-size: 15px; }
-    #overlay button {
-      font: inherit; font-size: 18px; padding: 12px 34px; border-radius: 12px; border: 0;
-      background: #ffd23f; color: #1a1400; font-weight: 800;
-    }
-    #overlay button:active { transform: scale(.96); }
-  </style>
+  </script>
 </head>
 <body>
-  <div id="hud">
-    <div><span class="big" id="hud-queued">0/12</span> <span class="sub">queue</span></div>
-    <div><span class="big" id="hud-goal">0 left</span> <span class="sub">vehicles</span></div>
-    <div style="display:flex;gap:10px;align-items:center;">
-      <span class="big" id="hud-level">L1</span> <span class="sub" id="hud-streak"></span>
-      <button id="menu-btn" title="Levels">☰</button>
-    </div>
-  </div>
-  <div id="game"></div>
-  <div id="overlay">
-    <h1 id="ov-title">Street Jammed!</h1>
-    <p id="ov-sub">3 passengers from clearing the red bus</p>
-    <button id="ov-btn">Retry</button>
-  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

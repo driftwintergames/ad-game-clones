@@ -1,40 +1,38 @@
-# Bus Fever — game-local tuning (prefix: bus_fever_).
-# Canonical gameplay: vault "Ad Game Clones/bus-fever-gameplay.md"
-# (parking-lot escape + ordered color queue — v2; supersedes spawn-management v1).
+# Bus Fever - game-local tuning (prefix: bus_fever_).
+# Contract: vault "Ad Game Clones/bus-fever/spec.md" (v3 rewrite).
+# Code = spatial/boarding/side-fill rules; DAG = progression math only.
 
-# —— Board size ——
-CALC bus_fever_buses = min(9, 4 + (bus_fever_level - 1) / 2)
-CALC bus_fever_colors = min(6, 3 + (bus_fever_level - 1) / 3)
-CALC bus_fever_capacity = min(6, 4 + (bus_fever_level - 1) / 4)
+# Arrival pacing
+VAR bus_fever_base_interval = 3500
+VAR bus_fever_min_interval = 2000
+VAR bus_fever_interval_step = 150
+CALC bus_fever_level_interval = max(bus_fever_min_interval, bus_fever_base_interval - (level - 1) * bus_fever_interval_step)
 
-# —— Blocker cars (from level 6, cap 3) ——
-CALC bus_fever_cars = min(3, max(0, (bus_fever_level - 6) / 2))
+# Bus capacity
+VAR bus_fever_base_capacity = 4
+VAR bus_fever_max_capacity = 6
+# NOTE: grammar has no floor()/modulo (kernel pitfall) — curves stay real-valued
+# here; dagService applies Math.floor at consumption per spec 9.2.
+CALC bus_fever_level_capacity = min(bus_fever_max_capacity, bus_fever_base_capacity + (level - 1) / 4)
 
-# —— Crowd array: 4-7 exposed columns (lanes); only lane fronts can board ——
-CALC bus_fever_columns = min(7, 4 + (bus_fever_level - 1) / 4)
-# crowd depth (hidden mass behind the exposed front rows)
-VAR bus_fever_queue_cap = 520
-CALC bus_fever_seed_queue = min(500, 200 + (bus_fever_level - 1) * 30)
+# Bus count
+VAR bus_fever_base_buses = 4
+VAR bus_fever_max_buses = 12
+CALC bus_fever_level_buses = min(bus_fever_max_buses, bus_fever_base_buses + (level - 1) / 2)
 
-VAR bus_fever_arrival_start = 4.2
-VAR bus_fever_arrival_min = 2.0
-VAR bus_fever_arrival_step = 0.15
-CALC bus_fever_arrival_interval = max(bus_fever_arrival_min, bus_fever_arrival_start - (bus_fever_level - 1) * bus_fever_arrival_step)
+# Difficulty: color count and queue capacity scale with level
+CALC bus_fever_colors = min(6, 3 + (level - 1) / 3)
+CALC bus_fever_queue_capacity = 36 + min(12, (level - 1) / 2)
 
-# —— Bays: 2 normally; 1 on tight levels (every 5th). The grammar has no
-# truncation/modulo (L/5*5==L is a float identity), so tight levels are explicit. ——
-CALC bus_fever_bays = 2 - (bus_fever_level == 5 || bus_fever_level == 10 || bus_fever_level == 15 || bus_fever_level == 20)
+# Streak and score
+CALC bus_fever_streak_bonus = 100 * pow(streak, 1.25)
+CALC bus_fever_coins_win = 20 + level * 10
 
-# —— Rewards ——
-CALC bus_fever_goal = 0   # retired v1 token (kept so saves don't break)
-CALC bus_fever_streak_bonus = min(bus_fever_streak, meta_streak_bonus_max)
-CALC bus_fever_coins_win = 20 + bus_fever_level * 10
-
-# —— Progression entities (unchanged from v1) ——
-DEF PROGRESSION bus_fever_slot4 NAME="Extra Bay Preview" EMOJI="🅿️" ORDER=2 MAX=1 DESC="Third loading bay on non-tight levels. Unlocks at level 8."
+# Progression entities (kept from v1/v2; no in-game shop - scores/stats only)
+DEF PROGRESSION bus_fever_slot4 NAME="Extra Bay Preview" EMOJI="P" ORDER=2 MAX=1 DESC="Third loading bay. Unlocks at level 8."
 COST bus_fever_slot4 BASE=400 coin
-REVEALUNLOCK bus_fever_slot4 bus_fever_level >= 8
+REVEALUNLOCK bus_fever_slot4 level >= 8
 
-DEF PROGRESSION bus_fever_slow_walker NAME="Slow Walkers" EMOJI="🐢" ORDER=3 MAX=1 DESC="VIP passengers that board slowly but count double. From level 10."
+DEF PROGRESSION bus_fever_slow_walker NAME="Slow Walkers" EMOJI="T" ORDER=3 MAX=1 DESC="VIP passengers who board slowly but count double. From level 10."
 COST bus_fever_slow_walker BASE=300 coin
-REVEALUNLOCK bus_fever_slow_walker bus_fever_level >= 10
+REVEALUNLOCK bus_fever_slow_walker level >= 10
