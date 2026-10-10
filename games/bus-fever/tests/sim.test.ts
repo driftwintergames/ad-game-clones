@@ -23,11 +23,12 @@ describe('mulberry32', () => {
 });
 
 describe('Level 1', () => {
-  it('is hand-authored per spec 9.3', () => {
+  it('is hand-authored per spec 9.3 — ad-scale (10 buses, 50 people)', () => {
     const g = generateLevel1(getLevelConfig(1));
-    expect(g.vehicles).toHaveLength(4);
-    expect(g.seedQueue).toHaveLength(16);
-    expect(g.arrivals).toHaveLength(8);
+    expect(g.vehicles).toHaveLength(10);
+    expect(g.seedQueue).toHaveLength(30);
+    expect(g.arrivals).toHaveLength(20);
+    expect(g.seedQueue.length + g.arrivals.length).toBe(50);
   });
 
   it('greedy autoplay wins (full loop)', () => {
@@ -104,22 +105,24 @@ describe('DAG service', () => {
     for (let id = 1; id <= 100; id++) {
       const c = getLevelConfig(id);
       expect(c.intervalMs).toBeGreaterThanOrEqual(2000);
-      expect(c.buses).toBeGreaterThanOrEqual(4);
-      expect(c.buses).toBeLessThanOrEqual(12);
+      expect(c.buses).toBeGreaterThanOrEqual(10);
+      expect(c.buses).toBeLessThanOrEqual(30);
       expect(c.colors).toBeGreaterThanOrEqual(3);
       expect(c.colors).toBeLessThanOrEqual(6);
-      expect(c.capacity).toBeGreaterThanOrEqual(4);
+      expect(c.capacity).toBeGreaterThanOrEqual(5);
       expect(c.capacity).toBeLessThanOrEqual(6);
-      expect(c.queueTotalCapacity).toBeGreaterThanOrEqual(36);
-      expect(c.queueTotalCapacity).toBeLessThanOrEqual(48);
+      expect(c.queueTotalCapacity).toBeGreaterThanOrEqual(60);
+      expect(c.queueTotalCapacity).toBeLessThanOrEqual(90);
     }
   });
 
   it('applies spec 9.2 floors correctly', () => {
-    expect(getLevelConfig(1).buses).toBe(4);
-    expect(getLevelConfig(3).buses).toBe(5);
-    expect(getLevelConfig(9).buses).toBe(8);
+    expect(getLevelConfig(1).buses).toBe(12);
+    expect(getLevelConfig(2).buses).toBe(12);
+    expect(getLevelConfig(5).buses).toBe(14);
     expect(getLevelConfig(1).colors).toBe(3);
     expect(getLevelConfig(5).colors).toBe(4);
+    expect(getLevelConfig(1).queueTotalCapacity).toBe(60);
+    expect(getLevelConfig(31).queueTotalCapacity).toBe(90);
   });
 });

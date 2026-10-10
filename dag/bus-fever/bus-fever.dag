@@ -8,21 +8,21 @@ VAR bus_fever_min_interval = 2000
 VAR bus_fever_interval_step = 150
 CALC bus_fever_level_interval = max(bus_fever_min_interval, bus_fever_base_interval - (level - 1) * bus_fever_interval_step)
 
-# Bus capacity
-VAR bus_fever_base_capacity = 4
+# Bus capacity (5 from L1, 6 from L7 — ad-scale crowds)
+VAR bus_fever_base_capacity = 5
 VAR bus_fever_max_capacity = 6
 # NOTE: grammar has no floor()/modulo (kernel pitfall) — curves stay real-valued
 # here; dagService applies Math.floor at consumption per spec 9.2.
-CALC bus_fever_level_capacity = min(bus_fever_max_capacity, bus_fever_base_capacity + (level - 1) / 4)
+CALC bus_fever_level_capacity = min(bus_fever_max_capacity, bus_fever_base_capacity + (level - 1) / 6)
 
-# Bus count
-VAR bus_fever_base_buses = 4
-VAR bus_fever_max_buses = 12
+# Bus count (ad-scale: 12 at L2 rising to 30)
+VAR bus_fever_base_buses = 12
+VAR bus_fever_max_buses = 30
 CALC bus_fever_level_buses = min(bus_fever_max_buses, bus_fever_base_buses + (level - 1) / 2)
 
 # Difficulty: color count and queue capacity scale with level
 CALC bus_fever_colors = min(6, 3 + (level - 1) / 3)
-CALC bus_fever_queue_capacity = 36 + min(12, (level - 1) / 2)
+CALC bus_fever_queue_capacity = min(90, 60 + (level - 1))
 
 # Streak and score
 CALC bus_fever_streak_bonus = 100 * pow(streak, 1.25)

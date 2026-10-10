@@ -48,7 +48,7 @@ export const BAYS = [
   { rect: { x: 200, y: 332, w: 85, h: 76 }, center: { x: 242.5, y: 370 } },
 ];
 export const QUEUE_TOP = 424;
-export const QUEUE_ROWS = 6;
+export const QUEUE_ROWS = 9;
 export const QUEUE_PITCH = 42;
 export const QUEUE_SLOT_SIZE = 36;
 export const QUEUE_TOKEN_D = 28;
